@@ -43,6 +43,8 @@ import {
   type ShotReviewSessionStatus,
   type ShotVerdict,
 } from '@/api/shotReviews'
+import { toApiError } from '@/api/client'
+import { toast } from '@/stores/uiStore'
 
 export const SHOT_REVIEW_SESSIONS_KEY = ['shot-reviews', 'sessions'] as const
 export const SHOT_REVIEW_FOLDERS_KEY = ['shot-reviews', 'folders'] as const
@@ -141,6 +143,10 @@ export function useUpdateShotReviewSession() {
       qc.invalidateQueries({ queryKey: [...SHOT_REVIEW_SESSIONS_KEY, session.id] })
       qc.invalidateQueries({ queryKey: SHOT_REVIEW_SESSIONS_KEY })
     },
+    // 「标记完成 / 重新开启」失败时同样要让用户感知（本 mutation 无乐观更新，无需回滚）
+    onError: (e) => {
+      toast(`保存失败：${toApiError(e).message}`, 'error')
+    },
   })
 }
 
@@ -220,10 +226,12 @@ export function useUpdateShotReviewItem(sessionId: string) {
       })
       return { prev }
     },
-    onError: (_e, _vars, ctx) => {
+    onError: (e, _vars, ctx) => {
       for (const [key, data] of ctx?.prev ?? []) {
         qc.setQueryData(key, data)
       }
+      // R-2：打分/改判/选版保存失败必须让用户感知——之前只回滚不提示，用户会以为已保存
+      toast(`保存失败：${toApiError(e).message}，已恢复为保存前状态`, 'error')
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: itemsPrefix })
@@ -283,10 +291,12 @@ export function useBatchUpdateShotReviewItems(sessionId: string) {
       })
       return { prev }
     },
-    onError: (_e, _vars, ctx) => {
+    onError: (e, _vars, ctx) => {
       for (const [key, data] of ctx?.prev ?? []) {
         qc.setQueryData(key, data)
       }
+      // R-2：批量保存失败同样必须提示，否则一整批打分/选版静默丢失
+      toast(`批量保存失败：${toApiError(e).message}，已恢复为保存前状态`, 'error')
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: itemsPrefix })

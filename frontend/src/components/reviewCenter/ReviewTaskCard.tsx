@@ -66,6 +66,8 @@ import { cn, formatFileSize } from '@/lib/utils'
  */
 export interface ReviewTaskCardProps {
   item: ShotReviewItem
+  /** 「下一条待审」跳转锚点（review-item-<itemId>），面板据此滚动定位。 */
+  id?: string
   /** 同镜号版本序号（1 起）与总数，用于标注「版本 2 / 共 3 版」。 */
   versionIndex: number
   versionCount: number
@@ -91,6 +93,7 @@ export interface ReviewTaskCardProps {
 
 export function ReviewTaskCard({
   item,
+  id,
   versionIndex,
   versionCount,
   regeneration,
@@ -264,6 +267,8 @@ export function ReviewTaskCard({
 
   return (
     <article
+      id={id}
+      tabIndex={-1}
       className={cn(
         'flex flex-col overflow-hidden rounded-card border bg-bg-secondary transition-all',
         item.selected ? 'border-success/50 ring-2 ring-success/30' : 'border-border',

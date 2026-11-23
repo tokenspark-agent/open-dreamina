@@ -44,6 +44,8 @@ export const PORTRAIT_VIDEO_HEIGHT = 'h-[420px]'
 
 export interface ShotReviewCardProps {
   item: ShotReviewItem
+  /** 「下一条待审」跳转锚点（review-item-<itemId>），面板据此滚动定位。 */
+  id?: string
   onScoreChange: (score: number) => void
   onClearScore: () => void
   onFeedbackChange: (feedback: string) => void
@@ -54,6 +56,7 @@ export interface ShotReviewCardProps {
 
 export function ShotReviewCard({
   item,
+  id,
   onScoreChange,
   onClearScore,
   onFeedbackChange,
@@ -86,6 +89,8 @@ export function ShotReviewCard({
 
   return (
     <div
+      id={id}
+      tabIndex={-1}
       className={cn(
         'flex flex-col overflow-hidden rounded-card border border-border bg-bg-secondary transition-all',
         item.verdict === 'pass' && 'ring-1 ring-success/20',

@@ -65,6 +65,7 @@ import { ShotGroupCard } from '@/components/shotReview/ShotGroupCard'
 import { ShotReviewCard, VERDICT_META, isPortraitItem } from '@/components/shotReview/ShotReviewCard'
 import { ReviewTaskCard } from '@/components/reviewCenter/ReviewTaskCard'
 import { FilterPill } from '@/components/reviewCenter/FilterPill'
+import { ReviewProgress } from '@/components/reviewCenter/ReviewProgress'
 import { SessionListPanel } from '@/components/reviewCenter/SessionListPanel'
 import type { SessionListItem } from '@/components/reviewCenter/SessionListPanel'
 import { SessionToolbar } from '@/components/reviewCenter/SessionToolbar'
@@ -77,6 +78,7 @@ import { toast } from '@/stores/uiStore'
 import { useActiveTaskList, useTaskStore } from '@/stores/taskStore'
 import { toApiError } from '@/api/client'
 import { cn, formatFileSize } from '@/lib/utils'
+import { reviewItemDomId, scrollToReviewItem } from '@/lib/reviewJump'
 
 type VerdictFilter = ShotVerdict | 'all'
 type ContentTypeFilter = ShotContentType | 'all'
@@ -131,6 +133,9 @@ export function ShotReviewPanel({
     null,
   )
   const [compareShot, setCompareShot] = useState<{ shotId: string; items: ShotReviewItem[] } | null>(null)
+  // R-5「下一条待审」跳转目标：切筛选后待条目重算完再定位
+  const [jumpTargetId, setJumpTargetId] = useState<string | null>(null)
+  const [awaitingJump, setAwaitingJump] = useState(false)
 
   // 切换会话（含新建后自动选中）时重置筛选
   useEffect(() => {
@@ -255,6 +260,52 @@ export function ShotReviewPanel({
     setVisibleCount(PAGE_SIZE_FLAT)
   }, [selectedId, episodeFilter, dramaFilter, contentTypeFilter, verdictFilter, viewMode, multiOnly])
 
+  // 切回「全部」档位后，待条目重算完再定位第一条待审
+  useEffect(() => {
+    if (!awaitingJump) return
+    if (itemsLoading) return
+    const target = items.find((i) => i.verdict === 'pending')
+    setAwaitingJump(false)
+    if (target) setJumpTargetId(target.id)
+    else toast('当前筛选下没有待审条目', 'default')
+  }, [awaitingJump, items, itemsLoading])
+
+  // 定位到目标条目：目标被分页截断时先展开到目标所在页，再滚动；
+  // 栏目视图按组滚动（组锚点取组内首条待审）；目标消失时放弃，避免残留目标反复触发
+  useEffect(() => {
+    if (!jumpTargetId) return
+    if (viewMode === 'grouped') {
+      const groupIndex = visibleGroups.findIndex(([, arr]) =>
+        arr.some((i) => i.id === jumpTargetId),
+      )
+      if (groupIndex === -1) {
+        setJumpTargetId(null)
+        return
+      }
+      if (groupIndex >= visibleGroupCount) {
+        setVisibleGroupCount(groupIndex + 1)
+        return
+      }
+      const groupItems = visibleGroups[groupIndex][1]
+      const groupJumpId =
+        groupItems.find((i) => i.verdict === 'pending')?.id ?? groupItems[0].id
+      if (scrollToReviewItem(groupJumpId)) setJumpTargetId(null)
+      else if (!itemsLoading) setJumpTargetId(null)
+      return
+    }
+    const idx = items.findIndex((i) => i.id === jumpTargetId)
+    if (idx === -1) {
+      setJumpTargetId(null)
+      return
+    }
+    if (idx >= visibleCount) {
+      setVisibleCount(idx + 1)
+      return
+    }
+    if (scrollToReviewItem(jumpTargetId)) setJumpTargetId(null)
+    else if (!itemsLoading) setJumpTargetId(null)
+  }, [jumpTargetId, items, visibleGroups, visibleGroupCount, visibleCount, viewMode, itemsLoading])
+
   const deleteMutation = useDeleteShotReviewSession()
   const rescanMutation = useRescanShotReviewSession()
   const updateSessionMutation = useUpdateShotReviewSession()
@@ -368,6 +419,21 @@ export function ShotReviewPanel({
 
   function handleScoreChange(itemId: string, score: number) {
     updateItemMutation.mutate({ itemId, payload: { score } })
+  }
+
+  /** R-5：跳到当前筛选下的第一条待审；档位筛选排除了待审时先切回「全部」再找。 */
+  function handleNextPending() {
+    const target = items.find((i) => i.verdict === 'pending')
+    if (target) {
+      setJumpTargetId(target.id)
+      return
+    }
+    if (verdictFilter !== 'all' && verdictFilter !== 'pending') {
+      setVerdictFilter('all')
+      setAwaitingJump(true)
+      return
+    }
+    toast('当前筛选下没有待审条目', 'default')
   }
 
   function handleClearScore(itemId: string) {
@@ -498,9 +564,11 @@ export function ShotReviewPanel({
                       count={Array.from(allGroups.values()).reduce((n, arr) => (arr.some((i) => i.selected) ? n + 1 : n), 0)}
                       className="text-success"
                     />
-                    <span className="text-fg-muted">
-                      已评 {summary.scored ?? 0} / 共 {summary.total ?? currentSession.item_count} 个
-                    </span>
+                    <ReviewProgress
+                      reviewed={summary.scored ?? 0}
+                      total={summary.total ?? currentSession.item_count}
+                      onNextPending={handleNextPending}
+                    />
                   </>
                 )}
               </SessionToolbar>
@@ -641,6 +709,7 @@ export function ShotReviewPanel({
                         return (
                           <ReviewTaskCard
                             key={item.id}
+                            id={reviewItemDomId(item.id)}
                             item={item}
                             versionIndex={info?.index ?? 1}
                             versionCount={info?.count ?? 1}
@@ -697,6 +766,9 @@ export function ShotReviewPanel({
                       {shownGroups.map(([key, groupItems]) => (
                         <ShotGroupCard
                           key={key}
+                          id={reviewItemDomId(
+                            (groupItems.find((i) => i.verdict === 'pending') ?? groupItems[0]).id,
+                          )}
                           items={groupItems}
                           onScoreChange={handleScoreChange}
                           onClearScore={handleClearScore}
@@ -752,6 +824,7 @@ export function ShotReviewPanel({
                     {visibleItems.map((item) => (
                       <ShotReviewCard
                         key={item.id}
+                        id={reviewItemDomId(item.id)}
                         item={item}
                         onScoreChange={(score) => handleScoreChange(item.id, score)}
                         onClearScore={() => handleClearScore(item.id)}

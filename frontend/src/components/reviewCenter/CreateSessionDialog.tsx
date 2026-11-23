@@ -26,7 +26,7 @@ import { Select } from '@/components/ui/Select'
 
 const MODE_COPY: Record<
   ReviewMode,
-  { title: string; description: string; titleLabel: string; titlePlaceholder: string; folderLabel: string; shotHint?: boolean }
+  { title: string; description: string; titleLabel: string; titlePlaceholder: string; folderLabel: string; shotHint?: boolean; configVar: string }
 > = {
   material: {
     title: '新建审阅会话',
@@ -34,6 +34,8 @@ const MODE_COPY: Record<
     titleLabel: '会话标题',
     titlePlaceholder: '如：EP01 分镜审阅',
     folderLabel: '素材文件夹',
+    // R-10：用户要改的是宿主机路径，REVIEW_SOURCE_ROOTS 是容器内路径，照旧文案改不会生效
+    configVar: 'REVIEW_SOURCES_HOST_PATH',
   },
   shot: {
     title: '新建镜头审片',
@@ -42,6 +44,7 @@ const MODE_COPY: Record<
     titlePlaceholder: '如：奥林匹斯 分镜镜头审片',
     folderLabel: '分镜脚本目录',
     shotHint: true,
+    configVar: 'SHOT_REVIEW_SOURCES_HOST_PATH',
   },
 }
 
@@ -135,7 +138,7 @@ export function CreateSessionDialog({
               <Folder className="mx-auto mb-1.5 h-5 w-5 text-fg-muted" />
               <p className="text-sm text-fg-secondary">未找到可用目录</p>
               <p className="mt-1 text-xs text-fg-muted">
-                请在 .env 中配置 REVIEW_SOURCE_ROOTS 指向素材所在目录
+                请在 .env 中配置 {copy.configVar} 指向素材所在目录
               </p>
             </div>
           ) : (

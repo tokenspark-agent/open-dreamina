@@ -20,9 +20,11 @@ export interface ProgressProps {
   className?: string
   /** Apply the breathing-glow animation to the active bar. */
   glow?: boolean
+  /** Accessible name for the progressbar (announced by screen readers). */
+  'aria-label'?: string
 }
 
-export function Progress({ value, className, glow }: ProgressProps) {
+export function Progress({ value, className, glow, 'aria-label': ariaLabel }: ProgressProps) {
   const clamped = Math.max(0, Math.min(100, value))
   return (
     <div
@@ -31,6 +33,7 @@ export function Progress({ value, className, glow }: ProgressProps) {
         className,
       )}
       role="progressbar"
+      aria-label={ariaLabel}
       aria-valuenow={clamped}
       aria-valuemin={0}
       aria-valuemax={100}

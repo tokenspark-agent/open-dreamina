@@ -34,10 +34,12 @@ import type { ReviewItem, ReviewSession, ReviewStatus } from '@/api/reviews'
 import { reviewItemFileUrl } from '@/api/reviews'
 import { ReviewItemCard, STATUS_META } from '@/components/review/ReviewItemCard'
 import { FilterPill } from '@/components/reviewCenter/FilterPill'
+import { ReviewProgress } from '@/components/reviewCenter/ReviewProgress'
 import { SessionListPanel } from '@/components/reviewCenter/SessionListPanel'
 import type { SessionListItem } from '@/components/reviewCenter/SessionListPanel'
 import { SessionToolbar } from '@/components/reviewCenter/SessionToolbar'
 import { SummaryDot } from '@/components/reviewCenter/SummaryDot'
+import { reviewItemDomId, scrollToReviewItem } from '@/lib/reviewJump'
 import { ImageLightbox } from '@/components/ImageLightbox'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
@@ -66,6 +68,9 @@ export function MaterialReviewPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [openItem, setOpenItem] = useState<ReviewItem | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<ReviewSession | null>(null)
+  // R-5「下一条待审」跳转目标：切筛选后待条目加载完再定位
+  const [jumpTargetId, setJumpTargetId] = useState<string | null>(null)
+  const [awaitingJump, setAwaitingJump] = useState(false)
 
   // 切换会话（含新建后自动选中）时回到全部状态
   useEffect(() => {
@@ -98,6 +103,23 @@ export function MaterialReviewPanel({
   const updateSessionMutation = useUpdateReviewSession()
   const updateItemMutation = useUpdateReviewItem(selectedId ?? '')
   const batchUpdateMutation = useBatchUpdateReviewItems(selectedId ?? '')
+
+  // 切回「全部」筛选后，待条目加载完再定位第一条待审
+  useEffect(() => {
+    if (!awaitingJump) return
+    if (itemsLoading) return
+    const target = (items ?? []).find((i) => i.status === 'pending')
+    setAwaitingJump(false)
+    if (target) setJumpTargetId(target.id)
+    else toast('没有待审条目', 'default')
+  }, [awaitingJump, items, itemsLoading])
+
+  // 定位到目标条目：渲染出后再滚动；加载完成仍找不到时放弃（避免残留目标反复触发）
+  useEffect(() => {
+    if (!jumpTargetId) return
+    if (scrollToReviewItem(jumpTargetId)) setJumpTargetId(null)
+    else if (!itemsLoading) setJumpTargetId(null)
+  }, [jumpTargetId, items, itemsLoading])
 
   async function handleDelete() {
     if (!confirmDelete) return
@@ -135,6 +157,21 @@ export function MaterialReviewPanel({
     updateItemMutation.mutate({ itemId, payload: { feedback } })
   }
 
+  function handleNextPending() {
+    const target = (items ?? []).find((i) => i.status === 'pending')
+    if (target) {
+      setJumpTargetId(target.id)
+      return
+    }
+    // 当前筛选下没有待审条目：切回「全部」后再找
+    if (statusFilter !== 'all') {
+      setStatusFilter('all')
+      setAwaitingJump(true)
+      return
+    }
+    toast('没有待审条目', 'default')
+  }
+
   function handleBatchApproveAll() {
     if (!items || items.length === 0) return
     const pending = items.filter((i) => i.status === 'pending')
@@ -147,7 +184,7 @@ export function MaterialReviewPanel({
       {
         onSuccess: (res) =>
           toast(`已批量通过 ${res.updated} 个条目`, 'success'),
-        onError: (e) => toast(toApiError(e).message, 'error'),
+        // 失败提示由 hook 的 onError 统一发（R-2），此处不再重复 toast
       },
     )
   }
@@ -202,9 +239,11 @@ export function MaterialReviewPanel({
                     <SummaryDot icon={CheckCircle2} label="通过" count={currentSession.summary.approved ?? 0} className="text-success" />
                     <SummaryDot icon={AlertTriangle} label="需修改" count={currentSession.summary.needs_revision ?? 0} className="text-warning" />
                     <SummaryDot icon={XCircle} label="驳回" count={currentSession.summary.rejected ?? 0} className="text-error" />
-                    <span className="text-fg-muted">
-                      共 {currentSession.summary.total ?? currentSession.item_count} 个
-                    </span>
+                    <ReviewProgress
+                      reviewed={(currentSession.summary.total ?? currentSession.item_count) - (currentSession.summary.pending ?? 0)}
+                      total={currentSession.summary.total ?? currentSession.item_count}
+                      onNextPending={handleNextPending}
+                    />
                   </>
                 )}
               </SessionToolbar>
@@ -250,6 +289,7 @@ export function MaterialReviewPanel({
                   {items.map((item, idx) => (
                     <ReviewItemCard
                       key={item.id}
+                      id={reviewItemDomId(item.id)}
                       item={item}
                       index={idx}
                       onStatusChange={(status) => handleStatusChange(item.id, status)}

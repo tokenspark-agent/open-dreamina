@@ -27,6 +27,8 @@ import { cn } from '@/lib/utils'
 export interface ShotGroupCardProps {
   /** 该镜号下的全部版本（已按文件名排序）。 */
   items: ShotReviewItem[]
+  /** 「下一条待审」跳转锚点（review-item-<组内首条待审条目 id>），面板据此滚动定位。 */
+  id?: string
   onScoreChange: (itemId: string, score: number) => void
   onClearScore: (itemId: string) => void
   onFeedbackChange: (itemId: string, feedback: string) => void
@@ -44,6 +46,7 @@ export interface ShotGroupCardProps {
 
 export function ShotGroupCard({
   items,
+  id,
   onScoreChange,
   onClearScore,
   onFeedbackChange,
@@ -65,6 +68,8 @@ export function ShotGroupCard({
 
   return (
     <section
+      id={id}
+      tabIndex={-1}
       className={cn(
         'overflow-hidden rounded-card border bg-bg-primary/40',
         multiTake ? 'border-accent/40' : 'border-border',

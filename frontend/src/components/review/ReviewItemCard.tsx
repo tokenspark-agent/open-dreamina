@@ -42,6 +42,8 @@ export const STATUS_META: Record<
 export interface ReviewItemCardProps {
   item: ReviewItem
   index: number
+  /** 「下一条待审」跳转锚点（review-item-<itemId>），面板据此滚动定位。 */
+  id?: string
   onStatusChange: (status: ReviewStatus) => void
   onFeedbackChange: (feedback: string) => void
   onOpen: () => void
@@ -50,6 +52,7 @@ export interface ReviewItemCardProps {
 export function ReviewItemCard({
   item,
   index,
+  id,
   onStatusChange,
   onFeedbackChange,
   onOpen,
@@ -86,6 +89,8 @@ export function ReviewItemCard({
 
   return (
     <div
+      id={id}
+      tabIndex={-1}
       className={cn(
         'group flex gap-3 rounded-card border border-border bg-bg-secondary p-3 transition-all',
         item.status !== 'pending' && 'ring-1',
